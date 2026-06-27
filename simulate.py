@@ -10,9 +10,7 @@ from functools import partial
 
 import numpy as np
 from pydrake.all import (
-    AddMultibodyPlantSceneGraph,
     ApplySimulatorConfig,
-    ApplyVisualizationConfig,
     ConstantVectorSource,
     DiagramBuilder,
     EventStatus,
@@ -21,56 +19,40 @@ from pydrake.all import (
     Multiplexer,
     Parser,
     RigidTransform,
-    SceneGraphConfig,
     Simulator,
     SimulatorConfig,
-    StartMeshcat,
-    VisualizationConfig,
 )
-from pydrake.common.yaml import yaml_load_file
 
-# Load the robot model.
+from simulation_station import SimulationStation
+
+
+class MySimulationStation(SimulationStation):
+    """An override that adds a small cube for the robot to interact with."""
+    def __init__(self):
+        SimulationStation.__init__(self)
+
+    def add_custom_elements(self):
+        Parser(self.plant).AddModels("models/urdf/cube.urdf")
+        cube_body = self.plant.GetBodyByName("cube_link")
+        X = RigidTransform()
+        X.set_translation([0.0, 0.0, 0.02])
+        self.plant.SetDefaultFloatingBaseBodyPose(cube_body, X)
+
 builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
-model_indices = Parser(plant).AddModels("models/urdf/stationary_ai.urdf")
 
-# Add a small cube to interact with, and set it's default pose to be just above
-# the table.
-Parser(plant).AddModels("models/urdf/cube.urdf")
-cube_body = plant.GetBodyByName("cube_link")
-X = RigidTransform()
-X.set_translation([0.0, 0.0, 0.02])
-plant.SetDefaultFloatingBaseBodyPose(cube_body, X)
-plant.Finalize()
-
-# Enable hydroelastic contact.
-scene_graph_config = SceneGraphConfig()
-scene_graph_config.default_proximity_properties.compliance_type = "compliant"
-scene_graph.set_config(scene_graph_config)
-
-# Set up meshcat visualization.
-# TODO(vincekurtz): avoid forced visualization publish events here.
-meshcat = StartMeshcat()
-visualization_config = VisualizationConfig()
-visualization_config.publish_proximity = True
-ApplyVisualizationConfig(visualization_config, builder=builder, meshcat=meshcat)
-
-meshcat_config = yaml_load_file("meshcat_config.yaml")
-for p in meshcat_config["initial_properties"]:
-    meshcat.SetProperty(p["path"], p["property"], p["value"])
-meshcat.SetCameraPose([0.9, 0.0, 0.9], [0.0, 0.0, 0.4])
+station = builder.AddSystem(MySimulationStation())
 
 # Add joint sliders to meshcat for setting desired joint angles.
 slider_names = []
-for actuator_index in plant.GetJointActuatorIndices():
-    actuator = plant.get_joint_actuator(actuator_index)
+for actuator_index in station.plant.GetJointActuatorIndices():
+    actuator = station.plant.get_joint_actuator(actuator_index)
     if actuator.has_controller():
         name = actuator.joint().name()
         lower_limit = actuator.joint().position_lower_limits()[0]
         upper_limit = actuator.joint().position_upper_limits()[0]
         default = actuator.joint().default_positions()[0]
         step = (upper_limit - lower_limit) / 100.0
-        meshcat.AddSlider(
+        station.meshcat.AddSlider(
             name=name,
             min=lower_limit,
             max=upper_limit,
@@ -78,7 +60,7 @@ for actuator_index in plant.GetJointActuatorIndices():
             value=default,
         )
         slider_names.append([name])
-meshcat.AddButton("Stop Simulation")
+station.meshcat.AddButton("Stop Simulation")
 
 
 # Add a little controller to send the slider values as joint position targets.
@@ -110,24 +92,19 @@ class MeshcatSliders(LeafSystem):
             output[i] = self._meshcat.GetSliderValue(slider)
 
 
-nu = len(slider_names)
-assert nu == plant.num_actuators(model_indices[0]), (
+nu = station.plant.num_actuators()
+assert len(slider_names) == nu, (
     "Number of sliders must match number of actuated joints."
 )
-sliders = builder.AddSystem(MeshcatSliders(meshcat, slider_names))
+sliders = builder.AddSystem(MeshcatSliders(station.meshcat, slider_names))
 q_desired = builder.AddSystem(Multiplexer(nu))
 v_desired = builder.AddSystem(ConstantVectorSource(np.zeros(nu)))
-x_desired = builder.AddSystem(Multiplexer([nu, nu]))
 
 # Connect the sliders to the plant's desired state input port.
 for i in range(nu):
     builder.Connect(sliders.get_output_port(i), q_desired.get_input_port(i))
-builder.Connect(q_desired.get_output_port(), x_desired.get_input_port(0))
-builder.Connect(v_desired.get_output_port(), x_desired.get_input_port(1))
-builder.Connect(
-    x_desired.get_output_port(),
-    plant.get_desired_state_input_port(model_indices[0]),
-)
+builder.Connect(q_desired.get_output_port(), station.GetInputPort("q_des"))
+builder.Connect(v_desired.get_output_port(), station.GetInputPort("v_des"))
 
 diagram = builder.Build()
 context = diagram.CreateDefaultContext()
@@ -152,7 +129,7 @@ print("Press the 'Stop Simulation' button to quit.")
 simulator.set_monitor(
     lambda context: (
         EventStatus.Succeeded()
-        if meshcat.GetButtonClicks("Stop Simulation") < 1
+        if station.meshcat.GetButtonClicks("Stop Simulation") < 1
         else EventStatus.ReachedTermination(diagram, "Stopped by user.")
     )
 )
