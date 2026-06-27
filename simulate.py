@@ -32,11 +32,11 @@ from pydrake.common.yaml import yaml_load_file
 # Load the robot model.
 builder = DiagramBuilder()
 plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.0)
-model_indices = Parser(plant).AddModels("urdf/stationary_ai.urdf")
+model_indices = Parser(plant).AddModels("models/urdf/stationary_ai.urdf")
 
 # Add a small cube to interact with, and set it's default pose to be just above
 # the table.
-Parser(plant).AddModels("urdf/cube.urdf")
+Parser(plant).AddModels("models/urdf/cube.urdf")
 cube_body = plant.GetBodyByName("cube_link")
 X = RigidTransform()
 X.set_translation([0.0, 0.0, 0.02])

@@ -25,7 +25,7 @@ uv sync
 View the model in MeshCat (with hydroelastics enabled):
 
 ```bash
-uv run -m pydrake.visualization.model_visualizer urdf/stationary_ai.urdf --compliance_type compliant
+uv run -m pydrake.visualization.model_visualizer models/urdf/stationary_ai.urdf --compliance_type compliant
 ```
 
 Run an interactive simulation (use MeshCat sliders to control the robot):
