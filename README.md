@@ -12,37 +12,24 @@ Description](https://github.com/TrossenRobotics/trossen_arm_description).
 
 ## Installation
 
-Clone this repository:
+We use [uv](https://docs.astral.sh/uv/) for dependency management:
 
 ```bash
 git clone https://github.com/vincekurtz/trossen_arm_drake.git
 cd trossen_arm_drake
-```
-
-Create a virtual environment and install dependencies:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
 
 ## Usage
 
-Activate the virtual environment:
-
-```bash
-source .venv/bin/activate
-```
-
 View the model in MeshCat (with hydroelastics enabled):
 
 ```bash
-python -m pydrake.visualization.model_visualizer urdf/stationary_ai.urdf --compliance_type compliant
+uv run -m pydrake.visualization.model_visualizer urdf/stationary_ai.urdf --compliance_type compliant
 ```
 
 Run an interactive simulation (use MeshCat sliders to control the robot):
 
 ```bash
-./simulate.py
+uv run simulate.py
 ```

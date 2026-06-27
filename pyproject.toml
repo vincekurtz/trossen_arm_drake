@@ -1,0 +1,16 @@
+[project]
+name = "trossen-arm-drake"
+version = "0.1.0"
+description = "Drake interface for the Trossen Stationary AI manipulator."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "drake>=1.54.0",
+    "ruff>=0.15.20",
+]
+
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

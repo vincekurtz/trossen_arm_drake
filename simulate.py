@@ -6,27 +6,26 @@
 #
 ##
 
-from typing import List
 from functools import partial
 
 import numpy as np
 from pydrake.all import (
-    StartMeshcat,
-    DiagramBuilder,
     AddMultibodyPlantSceneGraph,
+    ApplySimulatorConfig,
+    ApplyVisualizationConfig,
+    ConstantVectorSource,
+    DiagramBuilder,
+    EventStatus,
+    LeafSystem,
+    Meshcat,
+    Multiplexer,
     Parser,
+    RigidTransform,
+    SceneGraphConfig,
     Simulator,
     SimulatorConfig,
-    ApplySimulatorConfig,
-    SceneGraphConfig,
-    ApplyVisualizationConfig,
+    StartMeshcat,
     VisualizationConfig,
-    Meshcat,
-    LeafSystem,
-    Multiplexer,
-    ConstantVectorSource,
-    RigidTransform,
-    EventStatus,
 )
 from pydrake.common.yaml import yaml_load_file
 
@@ -50,10 +49,10 @@ scene_graph_config.default_proximity_properties.compliance_type = "compliant"
 scene_graph.set_config(scene_graph_config)
 
 # Set up meshcat visualization.
+# TODO(vincekurtz): avoid forced visualization publish events here.
 meshcat = StartMeshcat()
 visualization_config = VisualizationConfig()
 visualization_config.publish_proximity = True
-visualization_config.publish_period = np.inf
 ApplyVisualizationConfig(visualization_config, builder=builder, meshcat=meshcat)
 
 meshcat_config = yaml_load_file("meshcat_config.yaml")
@@ -93,7 +92,7 @@ class MeshcatSliders(LeafSystem):
     Adopted from https://github.com/RussTedrake/underactuated.
     """
 
-    def __init__(self, meshcat: Meshcat, slider_names: List[str]):
+    def __init__(self, meshcat: Meshcat, slider_names: list[str]):
         LeafSystem.__init__(self)
 
         self._meshcat = meshcat
@@ -140,7 +139,6 @@ config.integration_scheme = "cenic"
 config.accuracy = 1e-3
 config.max_step_size = 0.1
 config.use_error_control = True
-config.publish_every_time_step = True
 ApplySimulatorConfig(config, simulator)
 simulator.set_target_realtime_rate(1.0)
 simulator.Initialize()
