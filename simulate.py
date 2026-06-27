@@ -16,6 +16,7 @@ from pydrake.all import (
     EventStatus,
     LeafSystem,
     Meshcat,
+    MultibodyPlant,
     Multiplexer,
     Parser,
     RigidTransform,
@@ -26,21 +27,19 @@ from pydrake.all import (
 from simulation_station import SimulationStation
 
 
-class MySimulationStation(SimulationStation):
-    """An override that adds a small cube for the robot to interact with."""
-    def __init__(self):
-        SimulationStation.__init__(self)
-
-    def add_custom_elements(self):
-        Parser(self.plant).AddModels("models/urdf/cube.urdf")
-        cube_body = self.plant.GetBodyByName("cube_link")
-        X = RigidTransform()
-        X.set_translation([0.0, 0.0, 0.02])
-        self.plant.SetDefaultFloatingBaseBodyPose(cube_body, X)
+def add_cube(plant: MultibodyPlant):
+    """Adds a small cube to and positions it just above the table."""
+    Parser(plant).AddModels("models/urdf/cube.urdf")
+    cube_body = plant.GetBodyByName("cube_link")
+    X = RigidTransform()
+    X.set_translation([0.0, 0.0, 0.02])
+    plant.SetDefaultFloatingBaseBodyPose(cube_body, X)
 
 builder = DiagramBuilder()
 
-station = builder.AddSystem(MySimulationStation())
+station = builder.AddSystem(
+    SimulationStation(add_custom_elements=add_cube)
+)
 
 # Add joint sliders to meshcat for setting desired joint angles.
 slider_names = []

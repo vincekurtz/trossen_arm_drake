@@ -1,9 +1,12 @@
+from collections.abc import Callable
+
 from pydrake.all import (
     AddMultibodyPlantSceneGraph,
     ApplyVisualizationConfig,
     Demultiplexer,
     Diagram,
     DiagramBuilder,
+    MultibodyPlant,
     Multiplexer,
     Parser,
     SceneGraphConfig,
@@ -25,10 +28,15 @@ class SimulationStation(Diagram):
         - v_hat: estimated current joint velocities for the robot.
         - TODO(vincekurtz): RGBD camera images.
 
-    By default, the scene consists of two follower arms and a table. Override
-    the add_custom_elements() method to add additional objects to the scene.
+    By default, the scene consists of two follower arms and a table. Pass an
+    add_custom_elements(plant) function to the constructor to add additional
+    objects to the scene.
     """
-    def __init__(self):
+
+    def __init__(
+        self,
+        add_custom_elements: Callable[[MultibodyPlant], None] = None
+    ):
         Diagram.__init__(self)
 
         self.meshcat = StartMeshcat()
@@ -43,7 +51,8 @@ class SimulationStation(Diagram):
         )
 
         # Add any custom elements to the simulation scene before finalizing
-        self.add_custom_elements()
+        if add_custom_elements is not None:
+            add_custom_elements(self.plant)
         self.plant.Finalize()
 
         # Enable hydroelastic contact.
@@ -94,8 +103,3 @@ class SimulationStation(Diagram):
         builder.ExportOutput(x_hat.get_output_port(1), "v_hat")
 
         builder.BuildInto(self)
-
-    def add_custom_elements(self):
-        """Override this method to add extra simulated objects."""
-        pass
-
