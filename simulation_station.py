@@ -1,14 +1,26 @@
 from collections.abc import Callable
 
+import numpy as np
 from pydrake.all import (
     AddMultibodyPlantSceneGraph,
     ApplyVisualizationConfig,
+    CameraInfo,
+    ClippingRange,
+    ColorRenderCamera,
     Demultiplexer,
+    DepthRange,
+    DepthRenderCamera,
     Diagram,
     DiagramBuilder,
+    MakeRenderEngineVtk,
     MultibodyPlant,
     Multiplexer,
     Parser,
+    RenderCameraCore,
+    RenderEngineVtkParams,
+    RgbdSensor,
+    RgbdSensorDiscrete,
+    RigidTransform,
     SceneGraphConfig,
     StartMeshcat,
     VisualizationConfig,
@@ -26,7 +38,10 @@ class SimulationStation(Diagram):
     Output ports:
         - q_hat: estimated current joint positions for the robot.
         - v_hat: estimated current joint velocities for the robot.
-        - TODO(vincekurtz): RGBD camera images.
+        - {name}_camera.rgb_image: RGB image from the named RGBD camera.
+        - {name}_camera.depth_image: depth image from the named RGBD camera.
+
+    where {name} is one of "top", "bottom", "left", or "right".
 
     By default, the scene consists of two follower arms and a table. Pass an
     add_custom_elements(plant) function to the constructor to add additional
@@ -62,7 +77,60 @@ class SimulationStation(Diagram):
         )
         scene_graph.set_config(scene_graph_config)
 
-        # TODO(vincekurtz): add RGBD cameras.
+        # Set up a renderer for the cameras
+        renderer_name = "renderer"
+        scene_graph.AddRenderer(
+            renderer_name, MakeRenderEngineVtk(RenderEngineVtkParams())
+        )
+
+        # Intrinsics roughly matching the RealSense D405 color stream.
+        intrinsics = CameraInfo(
+            width=640, height=480, fov_y=np.radians(58.0)
+        )
+        camera_core = RenderCameraCore(
+            renderer_name,
+            intrinsics,
+            ClippingRange(0.01, 10.0),
+            RigidTransform(),
+        )
+        color_camera = ColorRenderCamera(camera_core, show_window=False)
+        depth_camera = DepthRenderCamera(
+            camera_core, DepthRange(0.07, 5.0)
+        )
+
+        # Add an RGBD camera at each of the optical frames defined in the URDF.
+        camera_optical_frames = {
+            "top": "cam_high_color_optical_frame",
+            "bottom": "cam_low_color_optical_frame",
+            "left": "follower_left_camera_color_optical_frame",
+            "right": "follower_right_camera_color_optical_frame",
+        }
+        for name, frame_name in camera_optical_frames.items():
+            optical_frame = self.plant.GetBodyByName(frame_name)
+            camera = builder.AddSystem(
+                RgbdSensorDiscrete(
+                    RgbdSensor(
+                        parent_id=self.plant.GetBodyFrameIdOrThrow(
+                            optical_frame.index()
+                        ),
+                        X_PB=RigidTransform(),
+                        color_camera=color_camera,
+                        depth_camera=depth_camera,
+                    ),
+                    period=0.1,  # 10 Hz refresh rate
+                )
+            )
+            builder.Connect(
+                scene_graph.get_query_output_port(),
+                camera.query_object_input_port(),
+            )
+            builder.ExportOutput(
+                camera.color_image_output_port(), f"{name}_camera.rgb_image"
+            )
+            builder.ExportOutput(
+                camera.depth_image_32F_output_port(),
+                f"{name}_camera.depth_image",
+            )
 
         # Connect the visualizer
         visualization_config = VisualizationConfig()

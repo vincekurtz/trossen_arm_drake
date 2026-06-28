@@ -19,6 +19,7 @@ from pydrake.all import (
     SimulatorConfig,
 )
 
+from camera_viewer import CameraViewer
 from meshcat_controller import MeshcatController
 from simulation_station import SimulationStation
 
@@ -32,9 +33,13 @@ def add_cube(plant: MultibodyPlant):
     plant.SetDefaultFloatingBaseBodyPose(cube_body, X)
 
 
-# Set up a Drake system diagram connecting the robot and the controller
+# Set up a Drake system diagram connecting the robot and the controller.
 builder = DiagramBuilder()
+
+# The simulation station represents the robot and scene.
 station = builder.AddSystem(SimulationStation(add_custom_elements=add_cube))
+
+# A meshcat controller provides sliders for control.
 controller = builder.AddSystem(
     MeshcatController(station.meshcat, station.plant)
 )
@@ -44,6 +49,20 @@ builder.Connect(
 builder.Connect(
     controller.GetOutputPort("v_des"), station.GetInputPort("v_des")
 )
+
+# Add a system that shows a pop-up window with live RGB and depth images.
+camera_names = ["top_camera", "bottom_camera", "left_camera", "right_camera"]
+camera_viewer = builder.AddSystem(CameraViewer(camera_names, period=0.5))
+for name in camera_names:
+    builder.Connect(
+        station.GetOutputPort(f"{name}.rgb_image"),
+        camera_viewer.GetInputPort(f"{name}.rgb_image"),
+    )
+    builder.Connect(
+        station.GetOutputPort(f"{name}.depth_image"),
+        camera_viewer.GetInputPort(f"{name}.depth_image"),
+    )
+
 diagram = builder.Build()
 context = diagram.CreateDefaultContext()
 
@@ -72,5 +91,4 @@ input("Waiting for meshcat... press [ENTER] to start simulating.")
 print("")
 print("Use the meshcat sliders to control the robot.")
 print("Press the 'Stop Simulation' button to quit.")
-
 simulator.AdvanceTo(np.inf)
