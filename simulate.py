@@ -52,7 +52,7 @@ builder.Connect(
 
 # Add a system that shows a pop-up window with live RGB and depth images.
 camera_names = ["top_camera", "bottom_camera", "left_camera", "right_camera"]
-camera_viewer = builder.AddSystem(CameraViewer(camera_names, period=0.5))
+camera_viewer = builder.AddSystem(CameraViewer(camera_names, period=0.1))
 for name in camera_names:
     builder.Connect(
         station.GetOutputPort(f"{name}.rgb_image"),
