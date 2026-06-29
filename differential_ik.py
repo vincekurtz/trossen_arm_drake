@@ -15,6 +15,7 @@ from pydrake.all import (
     DifferentialInverseKinematicsController,
     DifferentialInverseKinematicsSystem,
     DofMask,
+    JointLimits,
     LeafSystem,
     MultibodyPlant,
     RobotDiagramBuilder,
@@ -88,11 +89,22 @@ def build_differential_ik_controller(
     active = arm_velocity_indices(plant)
     active_dof = DofMask([i in active for i in range(plant.num_velocities())])
 
-    # Recipe: track the goals (least squares) with nullspace posture centering.
+    # Recipe: track the goals (least squares) with nullspace posture centering,
+    # plus a joint-velocity-limit constraint. The constraint is essential: it
+    # forbids any commanded velocity that would push a joint past its position
+    # limits, so when the target leaves the reachable workspace the command
+    # saturates at full extension instead of winding up and slamming the arm
+    # into the table.
     S = DifferentialInverseKinematicsSystem
     recipe = S.Recipe()
     recipe.AddIngredient(S.LeastSquaresCost(S.LeastSquaresCost.Config()))
     recipe.AddIngredient(S.JointCenteringCost(S.JointCenteringCost.Config()))
+    recipe.AddIngredient(
+        S.JointVelocityLimitConstraint(
+            S.JointVelocityLimitConstraint.Config(),
+            JointLimits(plant, active_dof),
+        )
+    )
 
     ik_system = S(
         recipe,
