@@ -47,15 +47,47 @@ class SpacemouseController(LeafSystem):
           frame, expressed in the world frame.
         - gripper_position: desired gripper joint positions (left, right).
 
-    SpaceMouse mapping (per arm):
-        - translate (x, y, z) -> end-effector translation in the world frame.
-        - tilt/twist (roll, pitch, yaw) -> end-effector rotation about its own
-          axes.
+    SpaceMouse mapping (per arm), tuned for watching the robot head-on in
+    meshcat (the default camera looks down the world -x axis, so on screen
+    +z is up, world -y is to the right, and world -x is into the screen):
+        - push left/right   -> end-effector moves left/right on screen.
+        - push in/out       -> end-effector moves into/out of the screen.
+        - lift/press        -> end-effector moves up/down.
+        - tilt/twist        -> end-effector rotates about the matching screen
+          (world) axis, not its own body axes.
         - button 0 -> close gripper, button 1 -> open gripper (held to move).
+
+    The raw SpaceMouse axes are remapped into world axes by TRANSLATION_MAP and
+    ROTATION_MAP below; flip the sign of a row if that axis feels reversed on
+    your hardware.
 
     If `show_pose_targets` is True and a `meshcat` is given, a coordinate triad
     is drawn at each desired end-effector pose.
     """
+
+    # Map raw SpaceMouse axes -> world axes for a head-on (-x looking) view.
+    # Input order is [x, y, z] (right, forward, up) for translation and
+    # [roll, pitch, yaw] for rotation; output is the world-frame [x, y, z].
+    #   push right (+x)   -> screen-right -> world -y
+    #   push forward (+y) -> into screen  -> world -x
+    #   push up (+z)      -> up           -> world +z
+    TRANSLATION_MAP = np.array(
+        [
+            [0.0, 1.0, 0.0],  # world x <- (forward) into/out of the page
+            [-1.0, 0.0, 0.0],  # world y <- -(right)
+            [0.0, 0.0, 1.0],  # world z <-  (up)
+        ]
+    )
+    #   roll  -> rotate about the depth axis      (world x)
+    #   pitch -> rotate about the screen-horizontal axis (world y)
+    #   yaw   -> rotate about the vertical axis    (world z)
+    ROTATION_MAP = np.array(
+        [
+            [1.0, 0.0, 0.0],  # world x <- roll
+            [0.0, 1.0, 0.0],  # world y <- pitch
+            [0.0, 0.0, -1.0],  # world z <- -yaw (flipped to match the view)
+        ]
+    )
 
     def __init__(
         self,
@@ -261,17 +293,22 @@ class SpacemouseController(LeafSystem):
         self, X_des: RigidTransform, twist: np.ndarray
     ) -> RigidTransform:
         """Advance an end-effector pose setpoint by one SpaceMouse twist."""
-        v_lin = twist[:3] * self._max_linear_speed
-        w_body = twist[3:] * self._max_angular_speed
+        # Remap the raw SpaceMouse axes into world axes so the motion is
+        # intuitive when viewing the robot head-on (see TRANSLATION_MAP /
+        # ROTATION_MAP).
+        v_world = self.TRANSLATION_MAP @ twist[:3] * self._max_linear_speed
+        w_world = self.ROTATION_MAP @ twist[3:] * self._max_angular_speed
 
         # Translation is applied in the world frame.
-        p_new = X_des.translation() + v_lin * self._period
+        p_new = X_des.translation() + v_world * self._period
 
-        # Rotation is applied about the end-effector's own axes (body frame).
-        theta = np.linalg.norm(w_body) * self._period
+        # Rotation is applied about the world (view) axes, so a given tilt
+        # always spins the end-effector the same way on screen regardless of
+        # its current orientation. Pre-multiplying rotates in the world frame.
+        theta = np.linalg.norm(w_world) * self._period
         if theta > 1e-9:
-            axis = w_body / np.linalg.norm(w_body)
-            R_new = X_des.rotation() @ RotationMatrix(AngleAxis(theta, axis))
+            axis = w_world / np.linalg.norm(w_world)
+            R_new = RotationMatrix(AngleAxis(theta, axis)) @ X_des.rotation()
         else:
             R_new = X_des.rotation()
         return RigidTransform(R_new, p_new)
