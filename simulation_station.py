@@ -59,7 +59,7 @@ class SimulationStation(Diagram):
 
         # Load the robot model.
         self.plant, scene_graph = AddMultibodyPlantSceneGraph(
-            builder, time_step=0.0
+            builder, time_step=0.01  # DEBUG: use SAP
         )
         model_indices = Parser(self.plant).AddModels(
             "models/urdf/stationary_ai.urdf"

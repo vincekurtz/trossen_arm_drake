@@ -21,9 +21,11 @@ from pydrake.all import (
     AbstractValue,
     AngleAxis,
     BusValue,
+    Cylinder,
     LeafSystem,
     Meshcat,
     MultibodyPlant,
+    Rgba,
     RigidTransform,
     RotationMatrix,
 )
@@ -50,6 +52,9 @@ class SpacemouseController(LeafSystem):
         - tilt/twist (roll, pitch, yaw) -> end-effector rotation about its own
           axes.
         - button 0 -> close gripper, button 1 -> open gripper (held to move).
+
+    If `show_pose_targets` is True and a `meshcat` is given, a coordinate triad
+    is drawn at each desired end-effector pose.
     """
 
     def __init__(
@@ -63,6 +68,7 @@ class SpacemouseController(LeafSystem):
         gripper_speed: float = 0.05,
         deadband: float = 0.05,
         require_devices: bool = True,
+        show_pose_targets: bool = True,
     ):
         LeafSystem.__init__(self)
 
@@ -98,6 +104,7 @@ class SpacemouseController(LeafSystem):
                     "grip_upper": grip_joint.position_upper_limits()[0],
                     "X0": ee_frame.CalcPoseInWorld(plant_context),
                     "grip0": q_default[grip_joint.position_start()],
+                    "target_path": f"/spacemouse_target/{side}",
                 }
             )
 
@@ -134,6 +141,13 @@ class SpacemouseController(LeafSystem):
         if meshcat is not None:
             meshcat.AddButton("Stop Simulation")
 
+        # Optionally draw a coordinate triad at each desired pose in meshcat.
+        self._meshcat = meshcat
+        self._show_targets = show_pose_targets and meshcat is not None
+        if self._show_targets:
+            for arm in self._arms:
+                self._add_triad(meshcat, arm["target_path"])
+
         # --- Ports and update --------------------------------------------
         self.DeclareAbstractOutputPort(
             "desired_poses",
@@ -145,6 +159,8 @@ class SpacemouseController(LeafSystem):
         )
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(period, 0.0, self._update)
+        if self._show_targets:
+            self.DeclarePeriodicPublishEvent(period, 0.0, self._draw_targets)
 
     # ---------------------------------------------------------------------
     # Device handling
@@ -274,3 +290,31 @@ class SpacemouseController(LeafSystem):
         output.SetFromVector(
             context.get_discrete_state(self._grip_state).get_value()
         )
+
+    # ---------------------------------------------------------------------
+    # Meshcat pose-target visualization
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _add_triad(meshcat, path, length=0.1, radius=0.004):
+        """Draw a static RGB coordinate triad (X, Y, Z) under `path`.
+
+        Each axis is a cylinder whose local pose orients its +z along the axis;
+        the whole triad is later positioned with SetTransform(path, X)."""
+        axes = {
+            "x": (Rgba(1, 0, 0, 1), RotationMatrix.MakeYRotation(np.pi / 2)),
+            "y": (Rgba(0, 1, 0, 1), RotationMatrix.MakeXRotation(-np.pi / 2)),
+            "z": (Rgba(0, 0, 1, 1), RotationMatrix()),
+        }
+        for name, (color, R) in axes.items():
+            meshcat.SetObject(
+                f"{path}/{name}", Cylinder(radius, length), color
+            )
+            # Offset the cylinder so it starts at the frame origin.
+            meshcat.SetTransform(
+                f"{path}/{name}", RigidTransform(R, R @ [0, 0, length / 2])
+            )
+
+    def _draw_targets(self, context):
+        for arm, pose_idx in zip(self._arms, self._pose_state, strict=True):
+            X_des = context.get_abstract_state(pose_idx).get_value()
+            self._meshcat.SetTransform(arm["target_path"], X_des)

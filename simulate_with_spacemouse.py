@@ -125,10 +125,10 @@ diff_ik.set_initial_position(
 # Set up the simulator to use CENIC
 simulator = Simulator(diagram, context)
 config = SimulatorConfig()
-config.integration_scheme = "cenic"
-config.accuracy = 1e-3
-config.max_step_size = TIME_STEP
-config.use_error_control = False
+# config.integration_scheme = "cenic"   # DEBUG: use discrete SAP
+# config.accuracy = 1e-3
+# config.max_step_size = TIME_STEP
+# config.use_error_control = False
 ApplySimulatorConfig(config, simulator)
 simulator.set_target_realtime_rate(1.0)
 simulator.Initialize()
