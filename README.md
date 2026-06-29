@@ -33,3 +33,21 @@ Run an interactive simulation (use MeshCat sliders to control the robot):
 ```bash
 uv run simulate.py
 ```
+
+## Spacemouse Control
+
+To teleoperate using two SpaceMouse joysticks, you'll need to install the HID
+API:
+```
+sudo apt install libhidapi-dev
+```
+
+And set associated permissions:
+```
+echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0664", GROUP="plugdev"' | sudo tee /etc/udev/rules.d/99-hidraw-permissions.rules
+sudo usermod -aG plugdev $USER
+newgrp plugdev
+```
+
+See [the pyspacemouse docs](https://spacemouse.kubaandrysek.cz/#dependencies)
+for details.

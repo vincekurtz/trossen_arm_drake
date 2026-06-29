@@ -8,6 +8,7 @@ dependencies = [
     "drake>=1.54.0",
     "pyqt5>=5.15.11",
     "pyqtgraph>=0.14.0",
+    "pyspacemouse>=2.0.0",
     "ruff>=0.15.20",
 ]
 
